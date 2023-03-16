@@ -547,6 +547,18 @@
     "@jridgewell/resolve-uri" "3.1.0"
     "@jridgewell/sourcemap-codec" "1.4.14"
 
+"@noble/curves@^0.8.2":
+  version "0.8.2"
+  resolved "https://registry.yarnpkg.com/@noble/curves/-/curves-0.8.2.tgz#276f65b599aa82265576e74ac76e9e845a621c3e"
+  integrity sha512-LTJ6aF/60/JmWwX4SNPovCklHKMO7jZ5cnHxqxt34GUTedj3rPDfN8iZG6ceuiwlanY7ZOWd6bmsejoqQ8Cccg==
+  dependencies:
+    "@noble/hashes" "1.2.0"
+
+"@noble/hashes@1.2.0":
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/@noble/hashes/-/hashes-1.2.0.tgz#a3150eeb09cc7ab207ebf6d7b9ad311a9bdbed12"
+  integrity sha512-FZfhjEDbT5GRswV3C6uvLPHMiVD6lQBmpoX5+eSiPaMTXte/IKqI5dykDxzZB/WBeK/CDuQRBWarPdi3FNY2zQ==
+
 "@scarf/scarf@^1.1.1":
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/@scarf/scarf/-/scarf-1.1.1.tgz#d8b9f20037b3a37dbf8dcdc4b3b72f9285bfce35"

@@ -1,6 +1,7 @@
 import { Dictionary } from "ton-core";
 import { Cell, exoticMerkleProof, loadShardIdent } from "ton-core";
-import { sha256_sync, signVerify } from "ton-crypto";
+import { sha256_sync } from "ton-crypto";
+import { ed25519 } from '@noble/curves/ed25519';
 import { configParse28, parseValidatorSet, ValidatorDescriptor } from "./config";
 import { ValidatorPRNG } from "./validatorPRNG";
 
@@ -144,7 +145,7 @@ function checkBlockSignatures(nodes: ValidatorDescriptor[], signatures: BlockSig
         if (!node) {
             throw new Error("Signature for unknown node");
         }
-        if (!signVerify(toSign, s.signature, node.publicKey)) {
+        if (!ed25519.verify(s.signature, toSign, node.publicKey)) {
             throw new Error("Invalid signature " + s.signature.toString('hex'));
         }
         signedWeight += node.weight;
