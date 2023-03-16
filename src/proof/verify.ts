@@ -1,5 +1,8 @@
 import { Dictionary } from "ton-core";
 import { Cell, exoticMerkleProof, loadShardIdent } from "ton-core";
+import { sha256_sync, signVerify } from "ton-crypto";
+import { configParse28, parseValidatorSet, ValidatorDescriptor } from "./config";
+import { ValidatorPRNG } from "./validatorPRNG";
 
 export type BlockId = {
     seqno: number,
@@ -70,10 +73,97 @@ export function verifyProofLink(link: {
     // Parse config
     let dict = Dictionary.loadDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell(), configCell);
     let catchain = configParse28(dict.get(28));
-    console.warn(catchain);
+    let validatorsDict = parseValidatorSet(dict.get(34)!.beginParse());
+
+    // Compute validator nodes
+    // https://github.com/ton-blockchain/ton/blob/fc9542f5e223140fcca833c189f77b1a5ae2e184/crypto/block/mc-config.cpp#L1731
+    // https://github.com/ton-blockchain/ton/blob/fc9542f5e223140fcca833c189f77b1a5ae2e184/crypto/block/mc-config.cpp#L1843
+    let count = Math.min(validatorsDict.main, validatorsDict.total); // Shard?
+    assert(validatorsDict.list.size === validatorsDict.total, "{ validators.list.size() == validators.total }");
+    let rng = new ValidatorPRNG(-1, 0n, blk.info.genCatchainSeqno, Buffer.alloc(32, 0));
+    let validators: ValidatorDescriptor[] = [];
+    for (let v of validatorsDict.list) {
+        validators[v[0]] = v[1];
+    }
+    let nodes: ValidatorDescriptor[] = [];
+    if (catchain.suffleMasterValidators) {
+        let idx = new Array(count);
+        for (let i = 0; i < count; i++) {
+            let j = rng.nextRanged(i + 1); // number 0 .. i
+            assert(j <= i, "{ j <= i }");
+            idx[i] = idx[j];
+            idx[j] = i;
+        }
+        console.warn(idx);
+        for (let i = 0; i < count; i++) {
+            let v = validators[idx[i]];
+            nodes.push(v);
+        }
+    } else {
+        for (let i = 0; i < count; i++) {
+            let v = validators[i];
+            nodes.push(v);
+        }
+    }
+
+    // ValidatorSet hash
+    // https://github.com/ton-blockchain/ton/blob/24dc184a2ea67f9c47042b4104bbb4d82289fac1/crypto/block/block.cpp#L2136
+
+
+    // Check block signatures
+    checkBlockSignatures(nodes, link.signatures, link.to);
 }
 
-export function checkBlockHeader(root: Cell, blockId: BlockId) {
+function checkBlockSignatures(nodes: ValidatorDescriptor[], signatures: BlockSignatures, to: BlockIdExt) {
+
+    // Block hash
+    let toSign = Buffer.alloc(68);
+    toSign.writeUInt32LE(0xc50b6e70, 0); // td::as<td::uint32>(to_sign) = 0xc50b6e70;  // ton.blockId root_cell_hash:int256 file_hash:int256 = ton.BlockId;
+    toSign.set(to.rootHash, 4); // memcpy(to_sign + 4, blkid.root_hash.data(), 32);
+    toSign.set(to.fileHash, 36); // memcpy(to_sign + 36, blkid.file_hash.data(), 32);
+
+    // Build node map
+    let nodeMap = new Map<string, ValidatorDescriptor>();
+    let totalWeight: bigint = 0n;
+    for (let n of nodes) {
+        totalWeight += n.weight;
+        nodeMap.set(computeNodeIdShort(n.publicKey).toString('hex'), n);
+    }
+
+    // Signatures
+    let signedWeight: bigint = 0n;
+    let count = 0;
+    let seen = new Set<string>();
+    for (let s of signatures.signatures) {
+        let k = s.nodeIdShort.toString('hex');
+        if (seen.has(k)) {
+            throw new Error("Duplicate signature for node");
+        }
+        seen.add(k);
+        let node = nodeMap.get(k);
+        if (!node) {
+            throw new Error("Signature for unknown node");
+        }
+        if (!signVerify(toSign, s.signature, node.publicKey)) {
+            throw new Error("Invalid signature " + s.signature.toString('hex'));
+        }
+        signedWeight += node.weight;
+        count++;
+    }
+
+    if (3n * signedWeight <= 2n * totalWeight) {
+        throw new Error("Too few signatures");
+    }
+}
+
+// Source: https://github.com/ton-blockchain/ton/blob/e37583e5e6e8cd0aebf5142ef7d8db282f10692b/crypto/block/check-proof.cpp#L487
+function computeNodeIdShort(publicKey: Buffer) {
+    let m = Buffer.alloc(4);
+    m.writeUint32LE(0x4813b4c6, 0)
+    return sha256_sync(Buffer.concat([m, publicKey]));
+}
+
+function checkBlockHeader(root: Cell, blockId: BlockId) {
 
     //
     // Source: https://github.com/ton-blockchain/ton/blob/e37583e5e6e8cd0aebf5142ef7d8db282f10692b/crypto/block/block.tlb#L446
@@ -216,41 +306,4 @@ function assert(condition: boolean, message: string) {
     if (!condition) {
         throw new Error(message);
     }
-}
-
-function configParse28(cell: Cell | null | undefined) {
-    if (!cell) {
-        throw new Error('Invalid config');
-    }
-    let slice = cell.beginParse();
-    let magic = slice.loadUint(8);
-    if (magic === 0xc1) {
-        let masterCatchainLifetime = slice.loadUint(32);
-        let shardCatchainLifetime = slice.loadUint(32);
-        let shardValidatorsLifetime = slice.loadUint(32);
-        let shardValidatorsCount = slice.loadUint(32);
-        return {
-            masterCatchainLifetime,
-            shardCatchainLifetime,
-            shardValidatorsLifetime,
-            shardValidatorsCount
-        };
-    }
-    if (magic === 0xc2) {
-        let flags = slice.loadUint(7);
-        let suffleMasterValidators = slice.loadBit();
-        let masterCatchainLifetime = slice.loadUint(32);
-        let shardCatchainLifetime = slice.loadUint(32);
-        let shardValidatorsLifetime = slice.loadUint(32);
-        let shardValidatorsCount = slice.loadUint(32);
-        return {
-            flags,
-            suffleMasterValidators,
-            masterCatchainLifetime,
-            shardCatchainLifetime,
-            shardValidatorsLifetime,
-            shardValidatorsCount
-        }
-    }
-    throw new Error('Invalid config');
 }
