@@ -56,7 +56,8 @@ export function verifyProofLink(link: {
 
     // From proof
     let vsRootCell = Cell.fromBoc(proof)[0];
-    exoticMerkleProof(vsRootCell.bits, vsRootCell.refs);
+    let vsProofHash = exoticMerkleProof(vsRootCell.bits, vsRootCell.refs).proofHash;
+    assert(vsProofHash.equals(link.from.rootHash), "{ proof_hash == link.from.rootHash }");
     let blkSrc = checkBlockHeader(vsRootCell, link.from);
     if (!blkSrc.extras || !blkSrc.extras.config) {
         throw new Error("Source block must have config");
@@ -65,7 +66,8 @@ export function verifyProofLink(link: {
 
     // To proof
     let vdRootCell = Cell.fromBoc(destProof)[0];
-    exoticMerkleProof(vdRootCell.bits, vdRootCell.refs);
+    let vdProofHash = exoticMerkleProof(vdRootCell.bits, vdRootCell.refs).proofHash;
+    assert(vdProofHash.equals(link.to.rootHash), "{ proof_hash == link.to.rootHash }");
     let blk = checkBlockHeader(vdRootCell, link.to);
     if (blk.info.keyBlock !== link.toKeyBlock) {
         throw new Error("Proof link must have a key block as destination");
@@ -95,7 +97,6 @@ export function verifyProofLink(link: {
             idx[i] = idx[j];
             idx[j] = i;
         }
-        console.warn(idx);
         for (let i = 0; i < count; i++) {
             let v = validators[idx[i]];
             nodes.push(v);
@@ -214,8 +215,6 @@ function checkBlockHeader(root: Cell, blockId: BlockId) {
         shard: shard.shardPrefix,
     }
     if (id.workchain !== blockId.workchain || id.seqno !== blockId.seqno /* || id.shard !== blockId.shard */) {
-        console.warn(id);
-        console.warn(blockId);
         throw new Error("Block header contains block id " + id + ", expected " + blockId);
     }
 
