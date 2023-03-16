@@ -1,5 +1,5 @@
 {
-  "name": "@tact-lang/proof",
+  "name": "@tact-lang/lite-proof",
   "version": "1.0.0",
   "main": "index.js",
   "repository": "https://github.com/tact-lang/lite-proof.git",
@@ -17,8 +17,10 @@
   },
   "dependencies": {
     "@noble/curves": "^0.8.2",
+    "@tact-lang/lite-client": "^0.1.0",
     "ton": "^13.4.1",
     "ton-core": "^0.48.0",
-    "ton-crypto": "^3.2.0"
+    "ton-crypto": "^3.2.0",
+    "zod": "^3.21.4"
   }
 }

@@ -134,7 +134,6 @@ function checkBlockSignatures(nodes: ValidatorDescriptor[], signatures: BlockSig
 
     // Signatures
     let signedWeight: bigint = 0n;
-    let count = 0;
     let seen = new Set<string>();
     for (let s of signatures.signatures) {
         let k = s.nodeIdShort.toString('hex');
@@ -150,7 +149,6 @@ function checkBlockSignatures(nodes: ValidatorDescriptor[], signatures: BlockSig
             throw new Error("Invalid signature " + s.signature.toString('hex'));
         }
         signedWeight += node.weight;
-        count++;
     }
 
     if (3n * signedWeight <= 2n * totalWeight) {
@@ -224,21 +222,32 @@ function checkBlockHeader(root: Cell, blockId: BlockId) {
     }
 
     //
-    // Parse extra
+    // Pruned references
     //
+
     block.loadRef(); // value_flow:^ValueFlow
     block.loadRef(); // state_update:^(MERKLE_UPDATE ShardState)
-    let extrasCell = block.loadRef();
+
+    //
+    // Parse extra
+    //
+
     let extras: {
         randomSeed: bigint,
         createdBy: bigint,
         config: Cell | null
     } | null = null;
-    if (!extrasCell.isExotic) {
-        let es = extrasCell.beginParse();
+
+    let blockExtra = block.loadRef();
+    block.endParse();
+    if (!blockExtra.isExotic) {
+        let es = blockExtra.beginParse();
         es.loadRef(); // block_extra in_msg_descr:^InMsgDescr
         es.loadRef(); // out_msg_descr:^OutMsgDescr
         es.loadRef(); // account_blocks:^ShardAccountBlocks
+        if (es.loadUint(32) !== 0x4a33f6fd) {
+            throw new Error("BlockExtra header must be equal to 0x4a33f6fd");
+        }
 
         let randomSeed = es.loadUintBig(256);
         let createdBy = es.loadUintBig(256);
@@ -246,6 +255,8 @@ function checkBlockHeader(root: Cell, blockId: BlockId) {
 
         // Load config
         let mcExtrasCell = es.loadMaybeRef();
+        es.endParse();
+
         if (mcExtrasCell) {
             let mxExtra = mcExtrasCell.beginParse();
             if (mxExtra.loadUint(16) !== 0xcca5) {
